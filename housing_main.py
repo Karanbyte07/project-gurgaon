@@ -1,40 +1,39 @@
 import os
+
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import root_mean_squared_error
-from sklearn.model_selection import cross_val_score
-
+from sklearn.model_selection import StratifiedShuffleSplit, cross_val_score
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.tree import DecisionTreeRegressor
 
 MODEL_FILE = "housing_model.pkl"
 PIPELINE_FILE = "housing_pipeline.pkl"
 
-def build_pipeline(numerical_attributes, categorical_attributes):
-    # for numerical colm
 
+def build_pipeline(numerical_attributes, categorical_attributes):
+    # Pipeline for numerical attributes
     numerical_pipeline = Pipeline(
         [
             ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler())
+            ("scaler", StandardScaler()),
         ]
     )
 
+    # Pipeline for categorical attributes
     categorical_pipeline = Pipeline(
         [
-            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+            ("onehot", OneHotEncoder(handle_unknown="ignore")),
         ]
     )
 
-
-    # construct the full pipeline
+    # Construct the full preprocessing pipeline
     preprocessing_pipeline = ColumnTransformer(
         [
             ("num", numerical_pipeline, numerical_attributes),
@@ -45,28 +44,33 @@ def build_pipeline(numerical_attributes, categorical_attributes):
 
 
 if not os.path.exists(MODEL_FILE):
-    #lets train the model and save it
+    # Let's train the model and save it
     housing_df = pd.read_csv("housing.csv")
 
-
-    # 2-> create stratified shuffle split
-    housing_df['income_category'] = pd.cut(housing_df['median_income'], 
-                                        bins=[0,1.5,3.0,4.5,6.0, np.inf],
-                                        labels=[1,2,3,4,5])
+    # Create stratified shuffle split based on income category
+    housing_df["income_category"] = pd.cut(
+        housing_df["median_income"],
+        bins=[0, 1.5, 3.0, 4.5, 6.0, np.inf],
+        labels=[1, 2, 3, 4, 5],
+    )
 
     split_strategy = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
 
-    for train_index, test_index in split_strategy.split(housing_df, housing_df['income_category']):
-        #save the test in input_data.csv for inference
-        housing_df.loc[test_index].drop('income_category', axis = 1).to_csv("input_data.csv", index=False)
-        housing = housing_df.loc[train_index].drop('income_category', axis = 1)
-
-
+    for train_index, test_index in split_strategy.split(
+        housing_df, housing_df["income_category"]
+    ):
+        # Save the test partition as input_data.csv for future inference
+        housing_df.loc[test_index].drop("income_category", axis=1).to_csv(
+            "input_data.csv", index=False
+        )
+        housing = housing_df.loc[train_index].drop("income_category", axis=1)
 
     housing_labels = housing["median_house_value"].copy()
-    housing_features = housing.drop("median_house_value", axis = 1)
+    housing_features = housing.drop("median_house_value", axis=1)
 
-    numerical_attributes = housing_features.drop("ocean_proximity", axis=1).columns.tolist()
+    numerical_attributes = (
+        housing_features.drop("ocean_proximity", axis=1).columns.tolist()
+    )
     categorical_attributes = ["ocean_proximity"]
 
     pipeline = build_pipeline(numerical_attributes, categorical_attributes)
@@ -75,14 +79,14 @@ if not os.path.exists(MODEL_FILE):
     model = RandomForestRegressor(random_state=42)
     model.fit(housing_prepared, housing_labels)
 
-    # save the model and pipeline
-    joblib.dump(model, MODEL_FILE) 
-    joblib.dump(pipeline, PIPELINE_FILE)    
+    # Save the trained model and processing pipeline
+    joblib.dump(model, MODEL_FILE)
+    joblib.dump(pipeline, PIPELINE_FILE)
 
     print("Model and pipeline saved successfully and trained on the data")
-    
+
 else:
-    #lets do interference on the model and pipeline
+    # Let's run inference using the saved model and pipeline
     print("Model and pipeline already exists, loading them")
     model = joblib.load(MODEL_FILE)
     pipeline = joblib.load(PIPELINE_FILE)
